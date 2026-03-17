@@ -1,5 +1,5 @@
 [package]
-name = "rusty_quack"
+name = "admiral_ducky"
 version = "0.1.0"
 edition = "2021"
 
@@ -15,11 +15,36 @@ strip = true
 # src/wasm_lib.rs forwards to src/lib.rs so that we can change from cdylib
 # (that is needed while compiling natively) to staticlib (needed since the
 # actual linking will be done via emcc
-name = "rusty_quack"
+name = "admiral_ducky"
 path = "src/wasm_lib.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
-duckdb = { version = "=1.4.3", features = ["vtab-loadable"] }
-duckdb-loadable-macros = "=0.1.13"
-libduckdb-sys = { version = "=1.4.3", features = ["loadable-extension"] }
+duckdb = { version = "=1.4.4", features = ["vtab-loadable", "vscalar"] }
+duckdb-loadable-macros = "=0.1.14"
+libduckdb-sys = { version = "=1.4.4", features = ["loadable-extension"] }
+tokio = { version = "1.43", features = ["rt", "rt-multi-thread", "time", "io-util"] }
+object_store = { version = "0.11", features = ["aws"] }
+futures = "0.3"
+anyhow = "1.0"
+bytes = "1.9"
+rhai = { version = "1.21", features = ["sync"] }
+regex = "1.11"
+tonic = { version = "0.12", features = ["channel"] }
+prost = "0.13"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+serde_json = "1.0"
+
+# HTML Extraction (Phase 0)
+scraper = "0.20"
+whatlang = "0.18"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "extraction"
+harness = false
+
+[build-dependencies]
+tonic-build = "0.12"

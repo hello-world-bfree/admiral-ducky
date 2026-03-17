@@ -1,0 +1,140 @@
+# name: test/sql/admiral_ducky.test
+# description: test admiral_ducky extension
+# group: [ducky]
+
+# Require statement will ensure the extension is loaded from now on
+require admiral_ducky
+
+require icu
+
+# Test that s3_transform scalar function exists (will error without valid S3 path/credentials)
+statement error
+SELECT s3_transform('invalid_path');
+----
+S3 path must start with s3://
+
+# Test s3_transform_with function exists with invalid path
+statement error
+SELECT s3_transform_with('invalid_path', 'trim');
+----
+S3 path must start with s3://
+
+# Test s3_transform with valid S3 path format (expected to fail fetching)
+statement error
+SELECT s3_transform('s3://test-bucket/test.txt');
+----
+Failed to fetch S3 object
+
+# Test s3_transform_script function exists with invalid path
+statement error
+SELECT s3_transform_script('invalid_path', 'text.to_upper()');
+----
+S3 path must start with s3://
+
+# Test s3_transform_script with valid S3 path format (expected to fail fetching)
+statement error
+SELECT s3_transform_script('s3://test-bucket/test.txt', 'text.to_upper()');
+----
+Failed to fetch S3 object
+
+# Test s3_fetch function exists with invalid path
+statement error
+SELECT s3_fetch('invalid_path');
+----
+S3 path must start with s3://
+
+# Test s3_fetch with valid S3 path format (expected to fail fetching)
+statement error
+SELECT s3_fetch('s3://test-bucket/test.txt');
+----
+Failed to fetch S3 object
+
+# Test s3_put function exists with invalid path
+statement error
+SELECT s3_put('invalid_path', 'content');
+----
+S3 path must start with s3://
+
+# Test s3_put with valid S3 path format (expected to fail without credentials)
+statement error
+SELECT s3_put('s3://test-bucket/test.txt', 'hello world');
+----
+Failed to put S3 object
+
+# Test rhai function works standalone (no S3 needed)
+query I
+SELECT rhai('hello world', 'text.to_upper()');
+----
+HELLO WORLD
+
+# Test rhai with squeeze_whitespace
+query I
+SELECT rhai('hello    world', 'squeeze_whitespace(text)');
+----
+hello world
+
+# Test rhai with regex_replace
+query I
+SELECT rhai('hello 123 world', 'regex_replace(text, "[0-9]+", "NUM")');
+----
+hello NUM world
+
+# Test rhai with truncate
+query I
+SELECT rhai('hello world', 'truncate(text, 5)');
+----
+hello
+
+# Test rhai with identity transform (just return text)
+query I
+SELECT rhai('unchanged', 'text');
+----
+unchanged
+
+# Test embed function exists (expected to fail connecting without running server)
+statement error
+SELECT embed('test text', 'http://127.0.0.1:59999');
+----
+Failed to connect
+
+# Test http_post function exists with unreachable endpoint
+statement error
+SELECT http_post('http://127.0.0.1:59999/post', '{"test": true}');
+----
+error sending request
+
+# Test http_post with invalid headers JSON
+statement error
+SELECT http_post('http://127.0.0.1:59999/post', '{}', 'not valid json');
+----
+Invalid headers JSON
+
+# Test http_post_rhai function exists with unreachable endpoint
+statement error
+SELECT http_post_rhai('http://127.0.0.1:59999/post', 'hello', 'text.to_upper()');
+----
+error sending request
+
+# Test http_post_rhai with invalid Rhai script
+statement error
+SELECT http_post_rhai('http://127.0.0.1:59999/post', 'hello', 'invalid syntax +++');
+----
+Script compilation error
+
+# Test http_post_batch function exists with invalid payloads JSON
+statement error
+SELECT * FROM http_post_batch('http://127.0.0.1:59999/post', 'not valid json', '10', '');
+----
+Invalid payloads JSON
+
+# Test http_post_batch with batch_size of 0
+statement error
+SELECT * FROM http_post_batch('http://127.0.0.1:59999/post', '["a", "b"]', '0', '');
+----
+batch_size must be greater than 0
+
+# Test http_post_batch with invalid batch_size
+statement error
+SELECT * FROM http_post_batch('http://127.0.0.1:59999/post', '["a"]', 'not_a_number', '');
+----
+Invalid batch_size

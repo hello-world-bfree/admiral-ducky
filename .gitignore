@@ -1,7 +1,37 @@
+# Rust
 /target
-build
-configure
-.idea
-duckdb_unittest_tempdir
+/test/target
+
+# DuckDB extension build artifacts
+build/
+configure/
+duckdb_unittest_tempdir/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs / Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
+.envrc
+
+# Claude Code
+.claude/
+.claudeignore
+__to_delete/
+__docs/
+
+# Test artifacts
 /test/bin
-venv
+
+# Misc
+*.log
