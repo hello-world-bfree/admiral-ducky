@@ -44,13 +44,9 @@ pub fn extract_and_chunk(html: &str, config: &ExtractConfig) -> ExtractionResult
     let mut context = HeadingContext::default();
     let mut paragraphs: Vec<(String, HeadingContext, usize)> = Vec::new();
     let mut raw_elements: Vec<RawElement> = Vec::new();
-    let mut element_count = 0;
-    let mut filtered_count = 0;
     let mut position = 0;
 
     for element in document.select(&selector) {
-        element_count += 1;
-
         if is_heading(&element) {
             update_context_from_element(&mut context, &element);
 
@@ -78,7 +74,6 @@ pub fn extract_and_chunk(html: &str, config: &ExtractConfig) -> ExtractionResult
 
         if is_paragraph(&element) {
             if is_filtered(&element, &config.filters) {
-                filtered_count += 1;
                 continue;
             }
 
@@ -117,8 +112,6 @@ pub fn extract_and_chunk(html: &str, config: &ExtractConfig) -> ExtractionResult
         chunks,
         raw_elements,
         parse_error: None,
-        element_count,
-        filtered_count,
     }
 }
 

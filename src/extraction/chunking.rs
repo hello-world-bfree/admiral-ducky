@@ -1,11 +1,5 @@
 use super::types::{Chunk, ChunkMode, HeadingContext};
 
-struct Paragraph {
-    text: String,
-    context: HeadingContext,
-    word_count: usize,
-}
-
 pub fn apply_chunking(
     paragraphs: Vec<(String, HeadingContext, usize)>,
     mode: ChunkMode,

@@ -91,9 +91,79 @@ SELECT rhai('unchanged', 'text');
 ----
 unchanged
 
+# Test embed_fake with single row (verifies list vector write path)
+query I
+SELECT length(embed_fake('hello world', 768));
+----
+768
+
+# Test embed_fake with multiple rows (verifies batched list vector output)
+query I
+SELECT length(embed_fake(t.text, 384)) FROM (VALUES ('hello'), ('world'), ('test'), ('embed'), ('fake')) AS t(text);
+----
+384
+384
+384
+384
+384
+
+# Test embed_fake with larger batch (verifies list vector reserve/write at scale)
+query I
+SELECT count(*) FROM (SELECT embed_fake('row ' || i::varchar, 768) FROM generate_series(1, 100) AS s(i));
+----
+100
+
 # Test embed function exists (expected to fail connecting without running server)
 statement error
 SELECT embed('test text', 'http://127.0.0.1:59999');
+----
+Failed to connect
+
+# Test embed with NULL text does not crash
+query I
+SELECT embed(NULL, 'http://127.0.0.1:59999');
+----
+NULL
+
+# Test embed error path does not double-free on batch with mixed results
+statement error
+SELECT embed(t.text, 'http://127.0.0.1:59999') FROM (VALUES ('hello'), ('world'), ('foo')) AS t(text);
+----
+Failed to connect
+
+# Test embed error on single row does not corrupt memory
+statement error
+SELECT embed('some long text that would need embedding', 'http://127.0.0.1:59999');
+----
+Failed to connect
+
+# Test token_count with unreachable endpoint
+statement error
+SELECT token_count('test text', 'http://127.0.0.1:59999');
+----
+Failed to connect
+
+# Test token_count with NULL text does not crash
+query I
+SELECT token_count(NULL, 'http://127.0.0.1:59999');
+----
+NULL
+
+# Test chunk_text with unreachable endpoint (error before list vector allocation)
+statement error
+SELECT chunk_text('test text', 512, 'http://127.0.0.1:59999');
+----
+Failed to connect
+
+# Test chunk_text with NULL text does not crash
+query I
+SELECT chunk_text(NULL, 512, 'http://127.0.0.1:59999');
+----
+NULL
+
+# Test chunk_text error path on multi-row input does not double-free
+statement error
+SELECT chunk_text(t.text, 512, 'http://127.0.0.1:59999') FROM (VALUES ('hello'), ('world')) AS t(text);
 ----
 Failed to connect
 
@@ -138,3 +208,70 @@ statement error
 SELECT * FROM http_post_batch('http://127.0.0.1:59999/post', '["a"]', 'not_a_number', '');
 ----
 Invalid batch_size
+
+# admiral_ducky_functions returns the catalog
+query I
+SELECT count(*) >= 16 FROM admiral_ducky_functions();
+----
+true
+
+# Specific function present
+query I
+SELECT count(*) FROM admiral_ducky_functions() WHERE name = 's3_fetch';
+----
+1
+
+# Both kinds populated
+query II
+SELECT
+  (SELECT count(*) FROM admiral_ducky_functions() WHERE kind = 'scalar') > 0,
+  (SELECT count(*) FROM admiral_ducky_functions() WHERE kind = 'table') > 0;
+----
+true	true
+
+# Every row has an example
+query I
+SELECT count(*) FROM admiral_ducky_functions() WHERE example IS NULL OR example = '';
+----
+0
+
+# Every row has a category
+query I
+SELECT count(*) FROM admiral_ducky_functions() WHERE category IS NULL OR category = '';
+----
+0
+
+# html_extract correctly tagged as table function
+query II
+SELECT name, kind FROM admiral_ducky_functions() WHERE name = 'html_extract';
+----
+html_extract	table
+
+# Comment discipline: every infra-bound row's example carries a -- requires comment
+# (embed_fake lives in the embed module but runs without infra)
+query I
+SELECT count(*) FROM admiral_ducky_functions()
+WHERE module IN ('s3','http','embed')
+  AND name <> 'embed_fake'
+  AND example NOT LIKE '%-- requires%';
+----
+0
+
+# Drift check A: every name in the catalog exists in duckdb_functions()
+query I
+SELECT count(*) FROM admiral_ducky_functions() af
+WHERE af.name NOT IN (SELECT function_name FROM duckdb_functions());
+----
+0
+
+# Drift check B: every registered admiral_ducky function appears in the catalog
+query I
+SELECT count(*) FROM duckdb_functions()
+WHERE function_name IN (
+    's3_fetch','s3_put','s3_exists','s3_transform','s3_transform_with','s3_transform_script',
+    'http_post','http_post_rhai','http_post_batch',
+    'rhai','embed','embed_fake','token_count','chunk_text','is_english','html_extract'
+)
+AND function_name NOT IN (SELECT name FROM admiral_ducky_functions());
+----
+0

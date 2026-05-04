@@ -127,11 +127,6 @@ impl VScalar for S3Transform {
         let input_vector = input.flat_vector(0);
         let output_vector = output.flat_vector();
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
 
         let input_data_ptr = input_vector.as_mut_ptr::<duckdb_string_t>();
 
@@ -150,7 +145,7 @@ impl VScalar for S3Transform {
             tasks.push((row_idx, Some((bucket, key))));
         }
 
-        let results: Vec<(usize, Result<String, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<String, String>)> = state.runtime.block_on(async {
             stream::iter(tasks)
                 .map(|(row_idx, path_opt)| {
                     let state = state.clone();
@@ -210,11 +205,6 @@ impl VScalar for S3TransformWith {
         let mode_vector = input.flat_vector(1);
         let output_vector = output.flat_vector();
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
 
         let path_data_ptr = path_vector.as_mut_ptr::<duckdb_string_t>();
         let mode_data_ptr = mode_vector.as_mut_ptr::<duckdb_string_t>();
@@ -243,7 +233,7 @@ impl VScalar for S3TransformWith {
             tasks.push((row_idx, Some((bucket, key, mode))));
         }
 
-        let results: Vec<(usize, Result<String, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<String, String>)> = state.runtime.block_on(async {
             stream::iter(tasks)
                 .map(|(row_idx, path_opt)| {
                     let state = state.clone();
@@ -306,11 +296,6 @@ impl VScalar for S3TransformScript {
         let script_vector = input.flat_vector(1);
         let output_vector = output.flat_vector();
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
 
         let path_data_ptr = path_vector.as_mut_ptr::<duckdb_string_t>();
         let script_data_ptr = script_vector.as_mut_ptr::<duckdb_string_t>();
@@ -339,7 +324,7 @@ impl VScalar for S3TransformScript {
             tasks.push((row_idx, Some((bucket, key, ast))));
         }
 
-        let results: Vec<(usize, Result<String, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<String, String>)> = state.runtime.block_on(async {
             stream::iter(tasks)
                 .map(|(row_idx, path_opt)| {
                     let state = state.clone();
@@ -414,11 +399,6 @@ impl VScalar for S3Fetch {
         let input_vector = input.flat_vector(0);
         let output_vector = output.flat_vector();
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
 
         let input_data_ptr = input_vector.as_mut_ptr::<duckdb_string_t>();
 
@@ -437,7 +417,7 @@ impl VScalar for S3Fetch {
             tasks.push((row_idx, Some((bucket, key))));
         }
 
-        let results: Vec<(usize, Result<String, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<String, String>)> = state.runtime.block_on(async {
             stream::iter(tasks)
                 .map(|(row_idx, path_opt)| {
                     let state = state.clone();
@@ -496,11 +476,6 @@ impl VScalar for S3Exists {
         let input_vector = input.flat_vector(0);
         let output_vector = output.flat_vector();
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
 
         let input_data_ptr = input_vector.as_mut_ptr::<duckdb_string_t>();
 
@@ -519,7 +494,7 @@ impl VScalar for S3Exists {
             tasks.push((row_idx, Some((bucket, key))));
         }
 
-        let results: Vec<(usize, Result<bool, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<bool, String>)> = state.runtime.block_on(async {
             stream::iter(tasks)
                 .map(|(row_idx, path_opt)| {
                     let state = state.clone();
@@ -584,11 +559,6 @@ impl VScalar for S3Put {
         let content_vector = input.flat_vector(1);
         let output_vector = output.flat_vector();
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
 
         let path_data_ptr = path_vector.as_mut_ptr::<duckdb_string_t>();
         let content_data_ptr = content_vector.as_mut_ptr::<duckdb_string_t>();
@@ -612,7 +582,7 @@ impl VScalar for S3Put {
             tasks.push((row_idx, Some((bucket, key, content))));
         }
 
-        let results: Vec<(usize, Result<String, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<String, String>)> = state.runtime.block_on(async {
             stream::iter(tasks)
                 .map(|(row_idx, task_opt)| {
                     let state = state.clone();

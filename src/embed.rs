@@ -1,4 +1,3 @@
-use anyhow::Context;
 use duckdb::{
     core::{DataChunkHandle, Inserter, LogicalTypeHandle, LogicalTypeId},
     types::DuckString,
@@ -32,11 +31,6 @@ impl VScalar for Embed {
         let text_vector = input.flat_vector(0);
         let endpoint_vector = input.flat_vector(1);
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
 
         let text_data_ptr = text_vector.as_mut_ptr::<duckdb_string_t>();
         let endpoint_data_ptr = endpoint_vector.as_mut_ptr::<duckdb_string_t>();
@@ -63,7 +57,7 @@ impl VScalar for Embed {
             tasks.push((row_idx, Some((text, endpoint))));
         }
 
-        let results: Vec<(usize, Result<Vec<f64>, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<Vec<f64>, String>)> = state.runtime.block_on(async {
             stream::iter(tasks)
                 .map(|(row_idx, task_opt)| {
                     let state = state.clone();
@@ -127,28 +121,27 @@ impl VScalar for Embed {
         let mut sorted_results = results;
         sorted_results.sort_by_key(|(idx, _)| *idx);
 
-        let total_elements: usize = sorted_results
-            .iter()
-            .map(|(_, r)| r.as_ref().map(|v| v.len()).unwrap_or(0))
-            .sum();
+        let mut validated: Vec<(usize, Vec<f64>)> = Vec::with_capacity(sorted_results.len());
+        for (row_idx, result) in sorted_results {
+            match result {
+                Ok(embedding) => validated.push((row_idx, embedding)),
+                Err(e) => return Err(e.into()),
+            }
+        }
 
+        let total_elements: usize = validated.iter().map(|(_, v)| v.len()).sum();
         let mut list_vector = output.list_vector();
         let mut child = list_vector.child(total_elements);
         let child_slice = child.as_mut_slice::<f64>();
 
         let mut offset: usize = 0;
-        for (row_idx, result) in sorted_results {
-            match result {
-                Ok(embedding) => {
-                    let len = embedding.len();
-                    list_vector.set_entry(row_idx, offset, len);
-                    for (i, val) in embedding.iter().enumerate() {
-                        child_slice[offset + i] = *val;
-                    }
-                    offset += len;
-                }
-                Err(e) => return Err(e.into()),
+        for (row_idx, embedding) in &validated {
+            let len = embedding.len();
+            list_vector.set_entry(*row_idx, offset, len);
+            for (i, val) in embedding.iter().enumerate() {
+                child_slice[offset + i] = *val;
             }
+            offset += len;
         }
 
         list_vector.set_len(total_elements);
@@ -171,6 +164,77 @@ impl VScalar for Embed {
     }
 }
 
+pub(crate) struct EmbedFake;
+
+impl VScalar for EmbedFake {
+    type State = ExtensionState;
+
+    unsafe fn invoke(
+        _state: &Self::State,
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> Result<(), Box<dyn Error>> {
+        let size = input.len();
+        let text_vector = input.flat_vector(0);
+        let dim_vector = input.flat_vector(1);
+
+        let text_data_ptr = text_vector.as_mut_ptr::<duckdb_string_t>();
+        let dim_ptr = dim_vector.as_mut_ptr::<i32>();
+
+        let mut validated: Vec<(usize, Vec<f64>)> = Vec::with_capacity(size);
+        for row_idx in 0..size {
+            if text_vector.row_is_null(row_idx as u64) {
+                validated.push((row_idx, vec![]));
+                continue;
+            }
+
+            let text = DuckString::new(&mut *text_data_ptr.add(row_idx))
+                .as_str()
+                .to_string();
+            let dim = *dim_ptr.add(row_idx) as usize;
+
+            let mut hash: f64 = 0.0;
+            for (i, b) in text.bytes().enumerate() {
+                hash += (b as f64) * ((i + 1) as f64) * 0.001;
+            }
+
+            let embedding: Vec<f64> = (0..dim)
+                .map(|i| ((hash + i as f64) * 0.01).sin())
+                .collect();
+            validated.push((row_idx, embedding));
+        }
+
+        let total_elements: usize = validated.iter().map(|(_, v)| v.len()).sum();
+        let mut list_vector = output.list_vector();
+        let mut child = list_vector.child(total_elements);
+        let child_slice = child.as_mut_slice::<f64>();
+
+        let mut offset: usize = 0;
+        for (row_idx, embedding) in &validated {
+            let len = embedding.len();
+            list_vector.set_entry(*row_idx, offset, len);
+            for (i, val) in embedding.iter().enumerate() {
+                child_slice[offset + i] = *val;
+            }
+            offset += len;
+        }
+
+        list_vector.set_len(total_elements);
+
+        Ok(())
+    }
+
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![
+                LogicalTypeHandle::from(LogicalTypeId::Varchar),
+                LogicalTypeHandle::from(LogicalTypeId::Integer),
+            ],
+            LogicalTypeHandle::list(&LogicalTypeHandle::from(LogicalTypeId::Double)),
+        )]
+    }
+}
+
 pub(crate) struct TokenCount;
 
 impl VScalar for TokenCount {
@@ -189,11 +253,6 @@ impl VScalar for TokenCount {
         let endpoint_vector = input.flat_vector(1);
         let output_vector = output.flat_vector();
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
 
         let text_data_ptr = text_vector.as_mut_ptr::<duckdb_string_t>();
         let endpoint_data_ptr = endpoint_vector.as_mut_ptr::<duckdb_string_t>();
@@ -220,7 +279,7 @@ impl VScalar for TokenCount {
             tasks.push((row_idx, Some((text, endpoint))));
         }
 
-        let results: Vec<(usize, Result<u32, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<u32, String>)> = state.runtime.block_on(async {
             stream::iter(tasks)
                 .map(|(row_idx, task_opt)| {
                     let state = state.clone();
@@ -398,11 +457,6 @@ impl VScalar for ChunkText {
         let max_tokens_vector = input.flat_vector(1);
         let endpoint_vector = input.flat_vector(2);
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
 
         let text_data_ptr = text_vector.as_mut_ptr::<duckdb_string_t>();
         let max_tokens_ptr = max_tokens_vector.as_mut_ptr::<i32>();
@@ -432,7 +486,7 @@ impl VScalar for ChunkText {
             row_inputs.push((row_idx, Some((text, max_tokens, endpoint))));
         }
 
-        let results: Vec<(usize, Result<Vec<String>, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<Vec<String>, String>)> = state.runtime.block_on(async {
             let mut results = Vec::with_capacity(row_inputs.len());
             for (row_idx, opt) in row_inputs {
                 match opt {
@@ -451,27 +505,26 @@ impl VScalar for ChunkText {
         let mut sorted_results = results;
         sorted_results.sort_by_key(|(idx, _)| *idx);
 
-        let total_strings: usize = sorted_results
-            .iter()
-            .map(|(_, r)| r.as_ref().map(|v| v.len()).unwrap_or(0))
-            .sum();
+        let mut validated: Vec<(usize, Vec<String>)> = Vec::with_capacity(sorted_results.len());
+        for (row_idx, result) in sorted_results {
+            match result {
+                Ok(chunks) => validated.push((row_idx, chunks)),
+                Err(e) => return Err(e.into()),
+            }
+        }
 
+        let total_strings: usize = validated.iter().map(|(_, v)| v.len()).sum();
         let mut list_vector = output.list_vector();
         let child = list_vector.child(total_strings);
 
         let mut offset: usize = 0;
-        for (row_idx, result) in sorted_results {
-            match result {
-                Ok(chunks) => {
-                    let len = chunks.len();
-                    list_vector.set_entry(row_idx, offset, len);
-                    for (i, chunk) in chunks.iter().enumerate() {
-                        child.insert(offset + i, chunk.as_str());
-                    }
-                    offset += len;
-                }
-                Err(e) => return Err(e.into()),
+        for (row_idx, chunks) in &validated {
+            let len = chunks.len();
+            list_vector.set_entry(*row_idx, offset, len);
+            for (i, chunk) in chunks.iter().enumerate() {
+                child.insert(offset + i, chunk.as_str());
             }
+            offset += len;
         }
 
         list_vector.set_len(total_strings);

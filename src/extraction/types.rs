@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ChunkMode {
@@ -104,8 +103,6 @@ pub struct ExtractionResult {
     pub chunks: Vec<Chunk>,
     pub raw_elements: Vec<RawElement>,
     pub parse_error: Option<String>,
-    pub element_count: usize,
-    pub filtered_count: usize,
 }
 
 impl Default for ExtractionResult {
@@ -114,8 +111,6 @@ impl Default for ExtractionResult {
             chunks: Vec::new(),
             raw_elements: Vec::new(),
             parse_error: None,
-            element_count: 0,
-            filtered_count: 0,
         }
     }
 }
@@ -217,25 +212,3 @@ impl ExtractConfig {
     }
 }
 
-#[derive(Debug)]
-pub enum ExtractionErrorKind {
-    Parse,
-    InputTooLarge,
-    InvalidUtf8,
-    Network,
-}
-
-#[derive(Debug)]
-pub struct ExtractionError {
-    pub kind: ExtractionErrorKind,
-    pub message: String,
-    pub recoverable: bool,
-}
-
-impl fmt::Display for ExtractionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl Error for ExtractionError {}

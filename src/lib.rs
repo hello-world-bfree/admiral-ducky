@@ -1,9 +1,4 @@
-extern crate duckdb;
-extern crate duckdb_loadable_macros;
-extern crate libduckdb_sys;
-
-use duckdb::Connection;
-use duckdb_loadable_macros::duckdb_entrypoint_c_api;
+use duckdb::{duckdb_entrypoint_c_api, Connection};
 use std::error::Error;
 
 mod state;
@@ -13,14 +8,16 @@ mod rhai;
 mod embed;
 mod extraction;
 mod lang;
+mod functions;
 
 use state::ExtensionState;
 use s3::{S3Exists, S3Fetch, S3Put, S3Transform, S3TransformScript, S3TransformWith};
 use http::{HttpPost, HttpPostBatchVTab, HttpPostRhai};
 use rhai::RhaiTransform;
-use embed::{ChunkText, Embed, TokenCount};
+use embed::{ChunkText, Embed, EmbedFake, TokenCount};
 use extraction::HtmlExtractVTab;
 use lang::IsEnglish;
+use functions::AdmiralDuckyFunctionsVTab;
 
 #[duckdb_entrypoint_c_api()]
 pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
@@ -70,6 +67,12 @@ pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>
 
     con.register_scalar_function_with_state::<ChunkText>("chunk_text", &state)
         .expect("Failed to register chunk_text scalar function");
+
+    con.register_scalar_function_with_state::<EmbedFake>("embed_fake", &state)
+        .expect("Failed to register embed_fake scalar function");
+
+    con.register_table_function::<AdmiralDuckyFunctionsVTab>("admiral_ducky_functions")
+        .expect("Failed to register admiral_ducky_functions table function");
 
     Ok(())
 }

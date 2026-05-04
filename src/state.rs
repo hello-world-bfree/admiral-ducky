@@ -17,6 +17,7 @@ pub(crate) struct ExtensionState {
     pub script_cache: Arc<RwLock<HashMap<String, AST>>>,
     pub grpc_channels: Arc<RwLock<HashMap<String, Channel>>>,
     pub http_client: Arc<reqwest::Client>,
+    pub runtime: Arc<tokio::runtime::Runtime>,
 }
 
 impl ExtensionState {
@@ -72,12 +73,19 @@ impl ExtensionState {
             .build()
             .expect("Failed to create HTTP client");
 
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .enable_all()
+            .build()
+            .expect("Failed to create Tokio runtime");
+
         Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
             rhai_engine: Arc::new(engine),
             script_cache: Arc::new(RwLock::new(HashMap::new())),
             grpc_channels: Arc::new(RwLock::new(HashMap::new())),
             http_client: Arc::new(http_client),
+            runtime: Arc::new(runtime),
         }
     }
 

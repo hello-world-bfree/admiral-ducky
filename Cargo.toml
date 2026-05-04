@@ -20,9 +20,8 @@ path = "src/wasm_lib.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
-duckdb = { version = "=1.4.4", features = ["vtab-loadable", "vscalar"] }
-duckdb-loadable-macros = "=0.1.14"
-libduckdb-sys = { version = "=1.4.4", features = ["loadable-extension"] }
+duckdb = { version = "=1.10501.0", features = ["loadable-extension", "vscalar"] }
+libduckdb-sys = { version = "=1.10501.0", features = ["loadable-extension"] }
 tokio = { version = "1.43", features = ["rt", "rt-multi-thread", "time", "io-util"] }
 object_store = { version = "0.11", features = ["aws"] }
 futures = "0.3"

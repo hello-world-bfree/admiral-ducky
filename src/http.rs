@@ -125,12 +125,6 @@ impl VScalar for HttpPost {
         let has_headers = input.num_columns() > 2;
         let headers_vector = if has_headers { Some(input.flat_vector(2)) } else { None };
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
-
         let url_data_ptr = url_vector.as_mut_ptr::<duckdb_string_t>();
         let body_data_ptr = body_vector.as_mut_ptr::<duckdb_string_t>();
         let headers_data_ptr = headers_vector.as_ref().map(|v| v.as_mut_ptr::<duckdb_string_t>());
@@ -167,7 +161,7 @@ impl VScalar for HttpPost {
             tasks.push((row_idx, Some((url, body, headers))));
         }
 
-        let results: Vec<(usize, Result<HttpResponse, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<HttpResponse, String>)> = state.runtime.block_on(async {
             stream::iter(tasks)
                 .map(|(row_idx, task_opt)| {
                     let client = state.http_client.clone();
@@ -270,12 +264,6 @@ impl VScalar for HttpPostRhai {
         let has_headers = input.num_columns() > 3;
         let headers_vector = if has_headers { Some(input.flat_vector(3)) } else { None };
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .context("Failed to create Tokio runtime")?;
-
         let url_data_ptr = url_vector.as_mut_ptr::<duckdb_string_t>();
         let data_data_ptr = data_vector.as_mut_ptr::<duckdb_string_t>();
         let script_data_ptr = script_vector.as_mut_ptr::<duckdb_string_t>();
@@ -320,7 +308,7 @@ impl VScalar for HttpPostRhai {
             tasks.push((row_idx, Some((url, transformed_body, headers))));
         }
 
-        let results: Vec<(usize, Result<HttpResponse, String>)> = runtime.block_on(async {
+        let results: Vec<(usize, Result<HttpResponse, String>)> = state.runtime.block_on(async {
             stream::iter(tasks)
                 .map(|(row_idx, task_opt)| {
                     let client = state.http_client.clone();
